@@ -1,0 +1,64 @@
+from keras.layers import Input, Dense
+from keras.models import Model
+import csv
+import numpy as np
+import scipy.spatial.distance as d
+from keras.models import Sequential
+from keras.layers import Dense
+from keras.models import model_from_json
+
+
+encoding_dim = 32
+
+input = Input(shape=(1,))
+encoded = Dense(encoding_dim, activation='relu',init='uniform')(input)
+encoded = Dense(encoding_dim,activation='softmax')(encoded)
+encoded = Dense(encoding_dim,activation='softmax')(encoded)
+encoded = Dense(encoding_dim,activation='softmax')(encoded)
+
+decoded = Dense(1, activation='relu')(encoded)
+
+autoencoder = Model(input=input, output=decoded)
+autoencoder.compile(loss='mean_squared_error',optimizer='adam',metrics=['accuracy'])
+
+encoder = Model(input=input, output=encoded)
+encoded_input = Input(shape=(encoding_dim,))
+decoder_layer = autoencoder.layers[-1]
+decoder = Model(input=encoded_input, output=decoder_layer(encoded_input))
+
+
+
+f=open('C:/Users/pavankumar.buduguppa/Documents/Projects/Chatbot/test 1.0/cb 2.0/senti.csv')
+f=csv.reader(f)
+
+x=[]
+words=[]
+for i in f:
+  x.append(float(i[1]))
+  words.append(i[0])
+
+
+
+x=1.0*(x-np.min(x))/(np.max(x)-np.min(x))
+
+
+autoencoder.fit(x,x,nb_epoch=10)
+
+
+autoencoder.predict(x)
+
+
+n1=0.01
+n2=0.2
+1-d.cosine(encoder.predict(np.array([n1])),encoder.predict(np.array([n2])))
+
+model_json = encoder.to_json()
+with open("senti_encoder.json", "w") as json_file:
+    json_file.write(model_json)
+
+
+
+encoder.save_weights("senti_encoder.h5")
+print("Saved model to disk")
+ 
+ 

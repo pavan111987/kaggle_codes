@@ -1,0 +1,91 @@
+from __future__ import print_function
+import os
+import numpy as np
+np.random.seed(1337)
+import numpy as np
+from keras.models import Sequential
+from keras.layers import Dense
+from keras.layers import LSTM
+from keras.layers import Dropout
+from keras.layers.embeddings import Embedding
+from keras.preprocessing import sequence
+# fix random seed for reproducibility
+np.random.seed(7)
+from keras.layers import merge
+from keras.preprocessing.text import Tokenizer
+from keras.preprocessing.sequence import pad_sequences
+from keras.utils.np_utils import to_categorical
+from keras.layers import Dense, Input, Flatten
+from keras.layers import Conv1D, MaxPooling1D, Embedding
+from keras.models import Model
+import sys
+import csv
+import nltk
+from nltk import pos_tag
+from nltk.corpus import stopwords 
+from scipy.spatial.distance import cosine as d
+import re
+from nltk.corpus import wordnet
+from numpy import loadtxt
+from xgboost import XGBClassifier
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score
+import xgboost
+
+
+file1='input/train.csv'
+file2='input/test.csv'
+print ("Loading the data file....")
+f=open(file1)
+f=csv.reader(f)
+train_texts1=[]
+train_texts2=[]
+x=[]
+train_y=[]
+for i in f:
+  try:
+    x.append(str(i[3]).encode('utf-8'))
+    x.append(str(i[4]).encode('utf-8'))
+    x.append(int(i[5]))
+    train_texts1.append(str(i[3]).encode('utf-8'))
+    train_texts2.append(str(i[4]).encode('utf-8'))
+    train_y.append(int(i[5]))
+  except:
+    pass
+
+
+
+f=open('input/meta_ip.csv')
+f=csv.reader(f)
+meta_ip=[]
+
+for i in f:
+  meta_ip.append(float(i[0]))
+  meta_ip.append(float(i[1]))
+  meta_ip.append(float(i[2]))
+  meta_ip.append(float(i[3]))
+  meta_ip.append(float(i[4]))
+  meta_ip.append(float(i[5]))
+  meta_ip.append(float(i[6]))
+  meta_ip.append(float(i[7]))
+  meta_ip.append(float(i[8]))
+
+
+
+meta_ip=np.array(meta_ip).reshape((len(meta_ip)/9),9)
+seed = 7
+test_size = 0.33
+X_train, X_test, y_train, y_test = train_test_split(meta_ip, train_y, test_size=test_size, random_state=seed)
+model = xgboost.XGBClassifier()
+model.fit(X_train, y_train)
+
+y_pred = model.predict(X_test)
+predictions = [round(value) for value in y_pred]
+
+# evaluate predictions
+accuracy = accuracy_score(y_test, predictions)
+print("Accuracy: %.2f%%" % (accuracy * 100.0))
+
+
+
+

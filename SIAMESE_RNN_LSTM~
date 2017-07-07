@@ -1,0 +1,202 @@
+from __future__ import print_function
+import os
+import numpy as np
+np.random.seed(1337)
+import numpy as np
+from keras.models import Sequential
+from keras.layers import Dense
+from keras.layers import LSTM
+from keras.layers import Dropout
+from keras.layers.embeddings import Embedding
+from keras.preprocessing import sequence
+# fix random seed for reproducibility
+np.random.seed(7)
+from keras.layers import merge
+from keras.preprocessing.text import Tokenizer
+from keras.preprocessing.sequence import pad_sequences
+from keras.utils.np_utils import to_categorical
+from keras.layers import Dense, Input, Flatten
+from keras.layers import Conv1D, MaxPooling1D, Embedding
+from keras.models import Model
+import sys
+import csv
+
+
+top_words_considered=10000
+max_sentence_length=10
+
+validation_split=0.2
+file1='input/train.csv'
+file2='input/test.csv'
+
+word_vector_file='glove.6B.300d.txt'
+
+
+print ("Loading word vectors.....")
+embeddings_index = {}
+f = open(word_vector_file)
+
+for line in f:
+    values = line.split()
+    word = values[0]
+    coefs = np.asarray(values[1:], dtype='float32')
+    embeddings_index[word] = coefs
+
+
+f.close()
+print ("Word Vectors Loaded!!")
+print('Found %s word vectors.' % len(embeddings_index))
+
+word_vector_length=len(embeddings_index.get('dog'))
+
+
+print ("Loading the data file....")
+f=open(file1)
+f=csv.reader(f)
+texts1=[]
+texts2=[]
+x=[]
+y=[]
+for i in f:
+  try:
+    x.append(str(i[3]).encode('utf-8'))
+    x.append(str(i[4]).encode('utf-8'))
+    x.append(int(i[5]))
+    texts1.append(str(i[3]).encode('utf-8'))
+    texts2.append(str(i[4]).encode('utf-8'))
+    y.append(int(i[5]))
+  except:
+    pass
+
+
+
+f=open(file1)
+f=csv.reader(f)
+x=[]
+for i in f:
+  try:
+    x.append(str(i[3]).encode('utf-8'))
+    x.append(str(i[4]).encode('utf-8'))
+    x.append(int(i[5]))
+    texts1.append(str(i[3]).encode('utf-8'))
+    texts2.append(str(i[4]).encode('utf-8'))
+    y.append(int(i[5]))
+  except:
+    pass
+ 
+
+
+
+all_texts=[]
+for i in texts1:
+  all_texts.append(i)
+
+
+for i in texts2:
+  all_texts.append(i)
+
+
+  
+c=[]
+MAX_SEQUENCE_LENGTH = max_sentence_length
+MAX_NB_WORDS = top_words_considered
+EMBEDDING_DIM = word_vector_length
+VALIDATION_SPLIT = validation_split
+
+
+
+tokenizer = Tokenizer(nb_words=MAX_NB_WORDS)
+tokenizer.fit_on_texts(all_texts)
+sequences1 = tokenizer.texts_to_sequences(texts1)
+sequences2 = tokenizer.texts_to_sequences(texts2)
+
+
+word_index = tokenizer.word_index
+print('Found %s unique tokens.' % len(word_index))
+
+data1 = pad_sequences(sequences1, maxlen=MAX_SEQUENCE_LENGTH)
+data2 = pad_sequences(sequences2, maxlen=MAX_SEQUENCE_LENGTH)
+
+
+labels=[]
+for i in y:
+  labels.append(i)
+
+
+labels=np.array(labels).reshape(len(y),1)
+
+print('Shape of data tensor:', data1.shape)
+print('Shape of data tensor:', data2.shape)
+print('Shape of label tensor:', labels.shape)
+
+
+
+# split the data into a training set and a validation set
+indices = np.arange(data1.shape[0])
+np.random.shuffle(indices)
+data1 = data1[indices]
+data2 = data2[indices]
+labels = labels[indices]
+nb_validation_samples = int(VALIDATION_SPLIT * data1.shape[0])
+
+x1_train = data1[:-nb_validation_samples]
+x2_train = data2[:-nb_validation_samples]
+y_train = labels[:-nb_validation_samples]
+x1_val = data1[-nb_validation_samples:]
+x2_val = data2[-nb_validation_samples:]
+y_val = labels[-nb_validation_samples:]
+
+print('Preparing embedding matrix.')
+
+# prepare embedding matrix
+nb_words = min(MAX_NB_WORDS, len(word_index))
+embedding_matrix = np.zeros((nb_words, EMBEDDING_DIM))
+for word, i in word_index.items():
+  if i >= MAX_NB_WORDS:
+    continue
+  embedding_vector = embeddings_index.get(word)
+  if embedding_vector is not None:
+    embedding_matrix[i] = embedding_vector
+
+
+
+# load pre-trained word embeddings into an Embedding layer
+# note that we set trainable = False so as to keep the embeddings fixed
+embedding_layer = Embedding(nb_words,
+                            EMBEDDING_DIM,
+                            weights=[embedding_matrix],
+                            input_length=MAX_SEQUENCE_LENGTH,
+                            trainable=False)
+
+print('Training model.')
+
+
+input1_tensor = Input(x1_train.shape[1:])
+input2_tensor = Input(x2_train.shape[1:])
+
+words_embedding_layer = embedding_layer
+seq_embedding_layer = LSTM(256, activation='tanh')
+
+seq_embedding = lambda tensor: seq_embedding_layer(words_embedding_layer(tensor))
+merge_layer = merge([seq_embedding(input1_tensor), seq_embedding(input2_tensor)])
+
+dense1_layer = Dense(16, activation='sigmoid')(merge_layer)
+output_layer = Dense(1, activation='sigmoid')(dense1_layer)
+
+
+model = Model([input1_tensor, input2_tensor], output_layer)
+
+model.compile(loss='binary_crossentropy', optimizer='adam',metrics=['accuracy'])
+model.summary()
+
+model.fit([x1_train, x2_train], y_train, 
+          validation_data=([x1_val, x2_val], y_val), 
+          batch_size=128, nb_epoch=5)
+
+
+
+
+
+
+
+

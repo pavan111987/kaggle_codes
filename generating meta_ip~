@@ -1,0 +1,239 @@
+from __future__ import print_function
+import os
+import numpy as np
+np.random.seed(1337)
+import numpy as np
+from keras.models import Sequential
+from keras.layers import Dense
+from keras.layers import LSTM
+from keras.layers import Dropout
+from keras.layers.embeddings import Embedding
+from keras.preprocessing import sequence
+# fix random seed for reproducibility
+np.random.seed(7)
+from keras.layers import merge
+from keras.preprocessing.text import Tokenizer
+from keras.preprocessing.sequence import pad_sequences
+from keras.utils.np_utils import to_categorical
+from keras.layers import Dense, Input, Flatten
+from keras.layers import Conv1D, MaxPooling1D, Embedding
+from keras.models import Model
+import sys
+import csv
+import nltk
+from nltk import pos_tag
+from nltk.corpus import stopwords 
+from scipy.spatial.distance import cosine as d
+import re
+from nltk.corpus import wordnet
+from numpy import loadtxt
+from xgboost import XGBClassifier
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score
+import xgboost
+
+
+
+
+s_words=stopwords.words('english')
+top_words_considered=10000
+max_sentence_length=10
+validation_split=0.4
+file1='input/train.csv'
+file2='input/test.csv'
+word_vector_file='glove.6B.300d.txt'
+print ("Loading word vectors.....")
+embeddings_index = {}
+f = open(word_vector_file)
+for line in f:
+    values = line.split()
+    word = values[0]
+    coefs = np.asarray(values[1:], dtype='float32')
+    embeddings_index[word] = coefs
+
+
+
+f.close()
+print ("Word Vectors Loaded!!")
+print('Found %s word vectors.' % len(embeddings_index))
+word_vector_length=len(embeddings_index.get('dog'))
+print ("Loading the data file....")
+f=open(file1)
+f=csv.reader(f)
+train_texts1=[]
+train_texts2=[]
+x=[]
+train_y=[]
+for i in f:
+  try:
+    x.append(str(i[3]).encode('utf-8'))
+    x.append(str(i[4]).encode('utf-8'))
+    x.append(int(i[5]))
+    train_texts1.append(str(i[3]).encode('utf-8'))
+    train_texts2.append(str(i[4]).encode('utf-8'))
+    train_y.append(int(i[5]))
+  except:
+    pass
+
+
+
+
+x1=[]
+for j in train_texts1:
+  s=[] 
+  for i in j.lower().split():
+    if ((re.sub('[^a-zA-Z0-9]','',i) not in s)):
+      s.append(re.sub('[^a-zA-Z0-9]','',i))
+  x1.append(' '.join(s))
+
+
+
+
+x2=[]
+for j in train_texts2:
+  s=[] 
+  for i in j.lower().split():
+    if ((re.sub('[^a-zA-Z0-9]','',i) not in s)):
+      s.append(re.sub('[^a-zA-Z0-9]','',i))
+  x2.append(' '.join(s))
+
+
+
+nn_x1=[]
+adj_x1=[]
+vbz_x1=[]
+for i in x1:
+  s1=[]
+  s2=[]
+  s3=[]
+  for j in pos_tag(i.split()):
+    if ('NN' in j[1]):
+      s1.append(j[0])
+    if ('JJ' in j[1]):
+      s2.append(j[0])
+    if ('VB' in j[1]):
+      s3.append(j[0])
+  nn_x1.append(' '.join(s1))
+  adj_x1.append(' '.join(s2))
+  vbz_x1.append(' '.join(s3))
+
+
+
+
+nn_x2=[]
+adj_x2=[]
+vbz_x2=[]
+for i in x2:
+  s1=[]
+  s2=[]
+  s3=[]
+  for j in pos_tag(i.split()):
+    if ('NN' in j[1]):
+      s1.append(j[0])
+    if ('JJ' in j[1]):
+      s2.append(j[0])
+    if ('VB' in j[1]):
+      s3.append(j[0])
+  nn_x2.append(' '.join(s1))
+  adj_x2.append(' '.join(s2))
+  vbz_x2.append(' '.join(s3))
+ 
+
+
+
+
+nn_match=[]
+for i in np.arange(len(nn_x1)):
+  if (len(np.unique((nn_x2[i]+' '+nn_x1[i]).split()))>0):
+    nn_match.append(1.0*len(set(nn_x1[i].split()).intersection(nn_x2[i].split()))/len(np.unique((nn_x2[i]+' '+nn_x1[i]).split())))
+  else:
+    nn_match.append(1.0*0)
+
+
+
+adj_match=[]
+for i in np.arange(len(adj_x1)):
+  if (len(np.unique((adj_x2[i]+' '+adj_x1[i]).split()))>0):
+    adj_match.append(1.0*len(set(adj_x1[i].split()).intersection(adj_x2[i].split()))/len(np.unique((adj_x2[i]+' '+adj_x1[i]).split())))
+  else:
+    adj_match.append(1.0*0)
+
+
+
+vbz_match=[]
+for i in np.arange(len(vbz_x1)):
+  if (len(np.unique((vbz_x2[i]+' '+vbz_x1[i]).split()))>0):
+    vbz_match.append(1.0*len(set(vbz_x1[i].split()).intersection(vbz_x2[i].split()))/len(np.unique((vbz_x2[i]+' '+vbz_x1[i]).split())))
+  else:
+    vbz_match.append(1.0*0)
+
+
+
+
+nn_semantic=[]
+for i in np.arange(len(nn_x1)):
+  s=[]
+  for j in nn_x1[i].split():
+    for k in nn_x2[i].split():
+      try:
+        s.append(1-d(embeddings_index.get(j),embeddings_index.get(k)))
+      except:
+        s.append(1.0*0)
+  if (len(s)>0):
+    nn_semantic.append(np.percentile(s,80))
+  else:
+    nn_semantic.append(0)
+
+
+
+
+adj_semantic=[]
+for i in np.arange(len(adj_x1)):
+  s=[]
+  for j in adj_x1[i].split():
+    for k in adj_x2[i].split():
+      try:
+        s.append(1-d(embeddings_index.get(j),embeddings_index.get(k)))
+      except:
+        s.append(1.0*0)
+  if (len(s)>0):
+    adj_semantic.append(np.percentile(s,80))
+  else:
+    adj_semantic.append(0)
+
+
+
+
+vbz_semantic=[]
+for i in np.arange(len(vbz_x1)):
+  s=[]
+  for j in vbz_x1[i].split():
+    for k in vbz_x2[i].split():
+      try:
+        s.append(1-d(embeddings_index.get(j),embeddings_index.get(k)))
+      except:
+        s.append(1.0*0)
+  if (len(s)>0):
+    vbz_semantic.append(np.percentile(s,80))
+  else:
+    vbz_semantic.append(0)
+
+
+
+
+
+def syn_sim(w1,w2):
+  s=[]
+  try:
+    for i in wordnet.synsets(w1):
+      for j in wordnet.synsets(w2):
+        s.append(i.wup_similarity(j))
+  except:
+    s.append(0)
+  if (len(s)>0):
+    return (np.max(s))
+  else:
+    return (0.0)
+  
+
+
